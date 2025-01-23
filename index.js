@@ -1,6 +1,6 @@
-let jsdom = require("jsdom");
+const jsdom = require("jsdom");
 const { JSDOM } = jsdom;
-const fs = require("fs");
+const fs = require("node:fs");
 const { parse } = require("csv-parse");
 const { program } = require("commander");
 
@@ -43,7 +43,7 @@ const readCSV = () => {
 
   fs.createReadStream("./prime-sizes.csv")
     .pipe(parse({ delimiter: ",", from_line: 2 }))
-    .on("data", function (row) {
+    .on("data", (row) => {
       for (i = 0; i < 5; i++) {
         if (row[i] !== "") {
           //don't push empty entry
@@ -79,19 +79,40 @@ const readCSV = () => {
 };
 
 const parseCSV = ({ sizesArray, shape = "rectangle" } = {}) => {
+  let circleGenerated = false;
+  let squareGenerated = false;
+  const ratios = {};
+
   for (i = 0; i < sizesArray.length; i++) {
     if (shape === "circle") {
-      let width = parseFloat(sizesArray[i]);
-      //circles only have one dimension
-      svgGenerator({
-        shape: shape,
-        width: width,
-      });
+      if (!circleGenerated) {
+        circleGenerated = true;
+        const width = Number.parseFloat(sizesArray[i]);
+        //circles only have one dimension
+        svgGenerator({
+          shape: shape,
+          width: width,
+        });
+      }
+    } else if (shape === "square") {
+      if (!squareGenerated) {
+        squareGenerated = true;
+        const width = Number.parseFloat(sizesArray[i]);
+        //squares only have one dimension
+        svgGenerator({
+          shape: shape,
+          width: width,
+        });
+      }
     } else {
-      let size = sizesArray[i].split("x");
-      let width = parseFloat(size[0].trim());
-      let height = parseFloat(size[1].trim());
-      svgGenerator({ shape: shape, width: width, height: height });
+      const size = sizesArray[i].split("x");
+      const width = Number.parseFloat(size[0].trim());
+      const height = Number.parseFloat(size[1].trim());
+
+      if (!ratios[width / height]) {
+        ratios[width / height] = shape;
+        svgGenerator({ shape: shape, width: width, height: height });
+      }
     }
   }
 };
@@ -107,14 +128,18 @@ const svgGenerator = ({
 } = {}) => {
   const canvasWidth = 64;
   const canvasHeight = 64;
-  let svgContents = ``;
-  let fileName = ``;
+  let svgContents;
+  let fileName;
 
   if (shape === "rectangle") {
     const ratio = width / height;
     const maxWidth = width * 1.1;
     const maxHeight = height * 1.1;
     //multiply the canvas dimensions by 10% to eliminate clipping from strokeWidth
+
+    if (ratio === 1) {
+      return; //early return for squares
+    }
 
     svgContents = `<svg
     width="${canvasWidth}"
@@ -137,19 +162,18 @@ const svgGenerator = ({
   }
 
   if (shape === "square") {
-    const ratio = width / height;
+    const ratio = 1;
     const maxWidth = width * 1.1;
-    const maxHeight = height * 1.1;
 
     svgContents = `<svg
     width="${canvasWidth}"
     height="${canvasHeight}"
-    viewBox="0 0 ${maxWidth} ${maxHeight}"
+    viewBox="0 0 ${maxWidth} ${maxWidth}"
     xmlns="http://www.w3.org/2000/svg">
     <rect
     x="${(maxWidth - width) / 2}"
-    y="${(maxHeight - height) / 2}"
-    width="${height * ratio}"
+    y="${(maxWidth - width) / 2}"
+    width="${width / ratio}"
     height="${width / ratio}"
     rx="${cornerRadius}"
     fill="${fillColor}"
@@ -158,7 +182,7 @@ const svgGenerator = ({
     />
     </svg>`;
 
-    fileName = `${width}x${height}-square.svg`;
+    fileName = "square.svg";
   }
 
   if (shape === "circle") {
@@ -178,7 +202,7 @@ const svgGenerator = ({
     </svg>`;
     //divide the canvas dimensions by 10% in r to eliminate clipping from strokeWidth
 
-    fileName = `${width}-circle.svg`;
+    fileName = "circle.svg";
   }
 
   if (shape === "oval") {
